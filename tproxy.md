@@ -24,7 +24,9 @@ Other flags hang out in a
 [of](http://ipset.netfilter.org/iptables-extensions.man.html) manpages.
 
 This document attempts to document everything in one place, with references
-to the authoritative sources.
+to the authoritative sources. Note that this documentation is quite at odds
+with other explanations found online, but it is believed this page is
+correct.
 
 Some of the "pseudocode" examples actually compile when used with
 [SimpleSockets](https://github.com/ahupowerdns/simplesocket). This is used
@@ -72,9 +74,10 @@ destination IP address:
 
   for(;;) {
     string packet=SRecvfrom(s, 1500, remote);
-    cout<<"Received a packet"<<endl;
+    printf("Received a packet\n");
   }
 ```
+
 
 Sending packets from non-local IP addresses
 -------------------------------------------
@@ -108,8 +111,7 @@ tcpdump -n host 1.2.3.4
 21:29:41.005856 IP 1.2.3.4.5300 > 198.41.0.4.53: [|domain]
 ```
 
-IP_TRANSPARENT is mentioned in
-[ip(7)](http://man7.org/linux/man-pages/man7/ip.7.html).
+IP_TRANSPARENT is mentioned in [ip(7)](http://man7.org/linux/man-pages/man7/ip.7.html).
 
  
 The iptables part
@@ -156,10 +158,10 @@ An example piece of code:
 
   ComboAddress remote(local), orig(local);
   int client = SAccept(s, remote);
-  cout<<"Got connection from "<<remote.toStringWithPort()<<endl;
+  cout&lt;&lt;"Got connection from "&lt;&lt;remote.toStringWithPort()&lt;&lt;endl;
 
   SGetsockname(client, orig);
-  cout<<"Original destination: "<<orig.toStringWithPort()<<endl;
+  cout&lt;&lt;"Original destination: "&lt;&lt;orig.toStringWithPort()&lt;&lt;endl;
 ```
 
 
