@@ -31,14 +31,63 @@ Some of the "pseudocode" examples actually compile when used with
 because these examples are easier to read than the somewhat cumbersome raw
 BSD sockets API equivalent.
 
-How it works from userspace
----------------------------
-Regular sockets are used for transparent proxying, but a special flag,
-IP_TRANSPARENT, is set to indicate that this socket might receive
-connections for non-local addresses, or send from non-local addresses.
 
-This already is useful without any further work to spoof the source address
-of a UDP packet:
+The routing part
+================
+When a packet enters a Linux system it is routed, dropped or if the
+destination address matches a local address, accepted for processing by the
+system itself. 
+
+Local addresses can be specific, like 192.0.2.1, but can also match whole
+ranges. This is for example how 127.0.0.0/8 is considered as 'local'.
+
+It is entirely possible to tell Linux 0.0.0.0/0 ('everything') is local, but
+this would make it unable to connect to any network.
+
+However, with a separate routing table, we can enable this selectively:
+
+```
+iptables -t mangle -I PREROUTING -p udp --dport 5301 -j MARK --set-mark 1
+ip rule add fwmark 1 lookup 100
+ip route add local 0.0.0.0/0 dev lo table 100
+```
+
+This says: mark all UDP packets coming in to the system to port 5301 with
+'1'.  The next two lines create and populate a routing table for packets
+marked with '1', and subsequently declare that in that table the whole IPv4
+range is "local".
+
+Intercepting packets: the userspace part
+----------------------------------------
+With the routing rule and table above, the following simple code intercepts
+all packets routed through the system destined for 5301, regardless of
+destination IP address:
+
+```
+  Socket s(AF_INET, SOCK_DGRAM, 0);
+  ComboAddress local("0.0.0.0", 5301);
+  ComboAddress remote(local);
+
+  SBind(s, local);
+
+  for(;;) {
+    string packet=SRecvfrom(s, 1500, remote);
+    cout<<"Received a packet"<<endl;
+  }
+```
+
+Sending packets from non-local IP addresses
+-------------------------------------------
+
+Regular sockets are used for transparent proxying, but a special flag,
+IP_TRANSPARENT, is set to indicate that this socket might receive data
+destined for a non-local addresses.
+
+Note: as explained above, we can declare 0.0.0.0/0 as "local" (or ::/0), but
+if this is not in a default routing table, we still need this flag to
+convince the kernel we know what we are doing.
+
+The following code spoofs a UDP address from 1.2.3.4 to 198.41.0.4:
 
 ```
   Socket s(AF_INET, SOCK_DGRAM, 0);
@@ -50,27 +99,28 @@ of a UDP packet:
   SSendto(s, "hi!", remote);
 ```
 
-Note: this requires root or CAP_NET_ADMIN to work. When run, you can observe
-with tcpdump that an actual packet leaves the host:
+Note: this requires root or CAP_NET_ADMIN to work. 
+
+With tcpdump we can observe that an actual packet leaves the host:
 
 ```
+tcpdump -n host 1.2.3.4
 21:29:41.005856 IP 1.2.3.4.5300 > 198.41.0.4.53: [|domain]
 ```
 
 IP_TRANSPARENT is mentioned in
 [ip(7)](http://man7.org/linux/man-pages/man7/ip.7.html).
 
+ 
 The iptables part
 -----------------
-Before an IP_TRANSPARENT socket works, Linux has to take the packet out of
-the routing process and hand it to userspace. 
+In the code examples above, traffic had to be delivered to a socket bound to
+the exact port of the intercepted traffic. We also had to bind the socket to
+0.0.0.0 (or ::) for it to see all traffic.
 
-To do so, `iptables` has a target called TPROXY which performs part of the
-work required.
-
-In short, TPROXY prepares packets for handing over to a local socket,
-without changing source or destination headers. Note that it only prepares,
-more work remains to be done.
+`iptables` has a target called TPROXY which gives us additional flexibility
+to send intercepted traffic to a specific local IP address and
+simultaneously mark it too.
 
 The basic syntax is:
 
@@ -79,27 +129,45 @@ iptables -t mangle -A PREROUTING -p tcp --dport 25 -j TPROXY \
   --tproxy-mark 0x1/0x1 --on-port 10025 --on-ip 127.0.0.1
 ```
 
-This says: take everything destined for a port 25 on TCP and prepare this
+This says: take everything destined for a port 25 on TCP and deliver this
 for a process listening on 127.0.0.1:10025 and mark the packet with 1.
 
+This mark then makes sure the packet ends up in the right routing table.
 
+With the `iptables` line above, we can now bind to 127.0.0.1:10025 and
+receive all traffic destined for port 25. Note that the IP_TRANSPARENT
+socket still needs to be set for this to work, even when we bind to
+127.0.0.1.
 
-The routing part
-================
-Once marked and prepared, the packet still has the same destination address
-and will happily zoom out of the router again without being handed to your
-process.
+Getting the original destination address
+========================================
+For TCP sockets, the original destination address and port of a socket is
+available via `getsockname()`.  This is needed for example to setup a
+connection to the originally intended destination.
 
-To make this happen, a policy rule needs to be set on packets marked with
-the mark 1:
-
+An example piece of code:
 ```
-ip rule add fwmark 1 lookup 100
-ip route add local 0.0.0.0/0 dev lo table 100
+  Socket s(AF_INET, SOCK_STREAM, 0);
+  SSetsockopt(s, IPPROTO_IP, IP_TRANSPARENT, 1);
+  ComboAddress local("127.0.0.1", 10025);
+
+  SBind(s, local);
+  SListen(s, 128);
+
+  ComboAddress remote(local), orig(local);
+  int client = SAccept(s, remote);
+  cout<<"Got connection from "<<remote.toStringWithPort()<<endl;
+
+  SGetsockname(client, orig);
+  cout<<"Original destination: "<<orig.toStringWithPort()<<endl;
 ```
 
-This says that all packets marked with '1' go to routing table 100, and this
-table then says 'all IPv4 addresses are local'. 
+
+For UDP, the IP_RECVORIGDSTADDR socket option can be set with
+`setsockopt()`. To actually get to that address, `recvmsg()` must be used
+which will then pass the original destination as a cmsg with index
+IP_ORIGDSTADDR containing a struct sockaddr_in.
+
 
 Caveats
 =======
@@ -116,16 +184,6 @@ sysctl net.ipv4.conf.all.forwarding=1
 sysctl net.ipv6.conf.all.forwarding=1
 ```
 
-Practical details
-=================
-For TCP sockets, the original destination address and port of a socket is
-available via `getsockname()`.  This is needed for exampel to setup a
-connection to the originally intended destination.
-
-For UDP, the IP_RECVORIGDSTADDR socket option can be set with
-`setsockopt()`. To actually get to that address, `recvmsg()` must be used
-which will then pass the original destination as a cmsg with index
-IP_ORIGDSTADDR containing a struct sockaddr_in.
 
 The -m socket line you find everywhere
 ======================================
