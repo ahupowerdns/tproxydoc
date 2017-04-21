@@ -154,7 +154,7 @@ This mark then makes sure the packet ends up in the right routing table.
 
 With the `iptables` line above, we can now bind to 127.0.0.1:10025 and
 receive all traffic destined for port 25. Note that the IP_TRANSPARENT
-socket still needs to be set for this to work, even when we bind to
+option still needs to be set for this to work, even when we bind to
 127.0.0.1.
 
 Getting the original destination address
