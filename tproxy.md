@@ -20,8 +20,8 @@ certainly is confusing.  Other components required to really make
 transparent proxying work are described on various [Stack
 Exchange](http://stackoverflow.com/questions/5615579/how-to-get-original-destination-port-of-redirected-udp-message) pages. 
 Other flags hang out in a
-[number](http://man7.org/linux/man-pages/man7/ip.7.html)
-[of](http://ipset.netfilter.org/iptables-extensions.man.html) manpages.
+[number](http://man7.org/linux/man-pages/man7/ip.7.html) of
+[manpages](http://ipset.netfilter.org/iptables-extensions.man.html).
 
 This document attempts to describe everything in one place, with references
 to the authoritative sources. Note that this documentation is quite at odds
@@ -186,22 +186,31 @@ For UDP, the IP_RECVORIGDSTADDR socket option can be set with
 which will then pass the original destination as a cmsg with index
 IP_ORIGDSTADDR containing a struct sockaddr_in.
 
+Note: as of May 2017, many recently deployed Linux kernels have 
+[a bug which breaks IP_RECVORIGSTADDR](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git/commit/?id=d36a1cb1e3285ba7eb1bcff5b231b4786deefc5b).
 
 Caveats
 =======
 None of this works locally. Packets need to actually enter your system and
 be routed. 
 
-In addition, the reverse path filter may confuse things by dropping packets. 
-Finally, make sure that the Linux machine is actually setup to forward.
-Combined:
+First, make sure that the Linux machine is actually setup to forward packets:
 
 ```
-sysctl net.ipv4.conf.all.rp_filter=0
 sysctl net.ipv4.conf.all.forwarding=1
 sysctl net.ipv6.conf.all.forwarding=1
 ```
 
+Secondly, in many cases the reverse path filter may decide to drop your
+intercepted packets. The `rp_filter` can't be disabled globally, so for each
+interface do:
+
+```
+sysctl net.ipv4.conf.eth0.rp_filter=0
+```
+
+For reasons, the net.ipv4.conf.all.rp_filter actually can only be used to
+enable the rp_filter globally, not disable it.
 
 The -m socket line you find everywhere
 ======================================
