@@ -23,7 +23,7 @@ Other flags hang out in a
 [number](http://man7.org/linux/man-pages/man7/ip.7.html)
 [of](http://ipset.netfilter.org/iptables-extensions.man.html) manpages.
 
-This document attempts to document everything in one place, with references
+This document attempts to describe everything in one place, with references
 to the authoritative sources. Note that this documentation is quite at odds
 with other explanations found online, but it is believed this page is
 correct.
@@ -33,6 +33,17 @@ Some of the "pseudocode" examples actually compile when used with
 because these examples are easier to read than the somewhat cumbersome raw
 BSD sockets API equivalent.
 
+High level
+==========
+There are four components:
+
+* A routing table that declares all IP addresses as local
+* iptables rules marking certain packets for processing by this routing
+  table
+    * And optionally map the traffic to a specific local address
+* A socket option IP_TRANSPARENT that marks sockets a suitable for receiving
+  such traffic
+* Potentially: ebtables to perform these function in bridging mode
 
 The routing part
 ================
