@@ -35,7 +35,7 @@ BSD sockets API equivalent.
 
 High level
 ==========
-There are four components:
+Four components are involved:
 
 * A routing table that declares all IP addresses as local
 * iptables rules marking certain packets for processing by this routing
@@ -47,15 +47,15 @@ There are four components:
 
 The routing part
 ================
-When a packet enters a Linux system it is routed, dropped or if the
+When a packet enters a Linux system it is routed, dropped, or if the
 destination address matches a local address, accepted for processing by the
 system itself. 
 
 Local addresses can be specific, like 192.0.2.1, but can also match whole
-ranges. This is for example how 127.0.0.0/8 is considered as 'local'.
+ranges. This is for example how all of 127.0.0.0/8 is considered as 'local'.
 
 It is entirely possible to tell Linux 0.0.0.0/0 ('everything') is local, but
-this would make it unable to connect to any network.
+this would leave it unable to connect to any remote address.
 
 However, with a separate routing table, we can enable this selectively:
 
@@ -66,12 +66,11 @@ ip route add local 0.0.0.0/0 dev lo table 100
 ```
 
 This says: mark all UDP packets coming in to the system to port 5301 with
-'1'.  The next two lines create and populate a routing table for packets
-marked with '1', and subsequently declare that in that table the whole IPv4
-range is "local".
+'1'.  The next line sends those marked packets to routing table 100. 
+And finally, the last line declares all of IPv4 as local in routing table 100.
 
 Intercepting packets: the userspace part
-----------------------------------------
+========================================
 With the routing rule and table above, the following simple code intercepts
 all packets routed through the system destined for 5301, regardless of
 destination IP address:
@@ -85,21 +84,27 @@ destination IP address:
 
   for(;;) {
     string packet=SRecvfrom(s, 1500, remote);
-    printf("Received a packet\n");
+    cout&lt;&lt;"Received a packet from "&lt;&lt;remote.toStringWithPort()&lt;&lt;endl;
   }
 ```
 
 
-Sending packets from non-local IP addresses
--------------------------------------------
+The two roles of IP_TRANSPARENT
+===============================
+The IP_TRANSPARENT socket option enables:
 
+1. Binding to addresses that are not (usually) considered local
+2. Receiving connections and packets from iptables TPROXY redirected sessions
+
+Binding to non-local IP addresses
+---------------------------------
 Regular sockets are used for transparent proxying, but a special flag,
 IP_TRANSPARENT, is set to indicate that this socket might receive data
 destined for a non-local addresses.
 
 Note: as explained above, we can declare 0.0.0.0/0 as "local" (or ::/0), but
 if this is not in a default routing table, we still need this flag to
-convince the kernel we know what we are doing.
+convince the kernel we know what we are doing when we bind to a non-local IP address.
 
 The following code spoofs a UDP address from 1.2.3.4 to 198.41.0.4:
 
