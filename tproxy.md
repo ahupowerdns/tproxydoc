@@ -187,7 +187,7 @@ which will then pass the original destination as a cmsg with index
 IP_ORIGDSTADDR containing a struct sockaddr_in.
 
 Note: as of May 2017, many recently deployed Linux kernels have 
-[a bug which breaks IP_RECVORIGSTADDR](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git/commit/?id=d36a1cb1e3285ba7eb1bcff5b231b4786deefc5b).
+[a bug which breaks IP_RECVORIGDSTADDR](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git/commit/?id=d36a1cb1e3285ba7eb1bcff5b231b4786deefc5b).
 
 Caveats
 =======
